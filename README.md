@@ -34,7 +34,7 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 - `/usr/bin/usb-log-mirror.sh`
 - `/etc/init.d/usb-log-mirror`
 - `/etc/usb-log-mirror.conf`
-- Default log output: `/mnt/sda1/gl-usb-logs/system.log`
+- Default log output: `<detected_mount>/gl-usb-logs/system.log` (for example `/mnt/sda1/gl-usb-logs/system.log`)
 
 ---
 
@@ -42,6 +42,8 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 
 ```sh
 USB_MOUNT="/mnt/sda1"
+AUTO_DETECT_STORAGE="1"
+PREFERRED_MOUNTS="/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1"
 LOG_SUBDIR="gl-usb-logs"
 LOG_NAME="system.log"
 MAX_SIZE_KB="5120"
@@ -75,14 +77,18 @@ chmod 0644 /etc/usb-log-mirror.conf
 # normal OpenWrt logs still work
 logread | tail -n 20
 
-# check mirror output exists on USB
-ls -lah /mnt/sda1/gl-usb-logs/
-tail -n 20 /mnt/sda1/gl-usb-logs/system.log
+# detect which USB/SD mount is currently selected
+/usr/bin/usb-log-mirror.sh check
+MOUNT="$(/usr/bin/usb-log-mirror.sh check | sed -n "s/^ok: //p")"
+
+# check mirror output on selected mount
+ls -lah "$MOUNT/gl-usb-logs/"
+tail -n 20 "$MOUNT/gl-usb-logs/system.log"
 
 # generate a test log line and confirm it lands in USB mirror
 logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)"
 sleep 2
-grep -n "usb-log-mirror-test" /mnt/sda1/gl-usb-logs/system.log | tail -n 1
+grep -n "usb-log-mirror-test" "$MOUNT/gl-usb-logs/system.log" | tail -n 1
 ```
 
 ---
@@ -108,4 +114,4 @@ rm -f /etc/init.d/usb-log-mirror /usr/bin/usb-log-mirror.sh
 
 ## End-user support message
 
-"Your router logging stays exactly the same as stock GL.iNet/OpenWrt (`logread` continues to work normally). We only add a background service that copies those logs to USB for persistence at `/mnt/sda1/gl-usb-logs/system.log`, with automatic rotation to help prevent filling the USB drive."
+"Your router logging stays exactly the same as stock GL.iNet/OpenWrt (`logread` continues to work normally). We only add a background service that copies those logs to USB for persistence at `<detected_mount>/gl-usb-logs/system.log`, with automatic rotation to help prevent filling the USB drive."

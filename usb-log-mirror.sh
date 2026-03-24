@@ -1,6 +1,6 @@
 #!/bin/sh
 # usb-log-mirror.sh
-# Mirror OpenWrt logread output to USB without changing default logd behavior.
+# Mirror OpenWrt logread output to USB/SD storage without changing default logd behavior.
 
 set -u
 
@@ -14,7 +14,13 @@ MAX_SIZE_KB="${MAX_SIZE_KB:-5120}"
 MAX_FILES="${MAX_FILES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-10}"
 CHECK_EVERY_LINES="${CHECK_EVERY_LINES:-50}"
+AUTO_DETECT_STORAGE="${AUTO_DETECT_STORAGE:-1}"
+PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1}"
 TAG="usb-log-mirror"
+
+# Optional explicit paths (if set, these are respected)
+LOG_DIR="${LOG_DIR:-}"
+LOG_FILE="${LOG_FILE:-}"
 
 # Load optional config file
 if [ -f "$CONFIG_FILE" ]; then
@@ -22,18 +28,71 @@ if [ -f "$CONFIG_FILE" ]; then
     . "$CONFIG_FILE"
 fi
 
-LOG_DIR="${LOG_DIR:-$USB_MOUNT/$LOG_SUBDIR}"
-LOG_FILE="${LOG_FILE:-$LOG_DIR/$LOG_NAME}"
+CUSTOM_LOG_DIR=0
+CUSTOM_LOG_FILE=0
+[ -n "${LOG_DIR:-}" ] && CUSTOM_LOG_DIR=1
+[ -n "${LOG_FILE:-}" ] && CUSTOM_LOG_FILE=1
+
+ACTIVE_MOUNT=""
 
 log_msg() {
     logger -t "$TAG" "$*"
 }
 
-is_mounted_rw() {
-    [ -d "$USB_MOUNT" ] || return 1
-    awk -v m="$USB_MOUNT" '$2==m {print $4}' /proc/mounts | grep -q 'rw' || return 1
-    touch "$USB_MOUNT/.usb-log-mirror-write-test" 2>/dev/null || return 1
-    rm -f "$USB_MOUNT/.usb-log-mirror-write-test" 2>/dev/null
+is_path_writable_mount() {
+    path="$1"
+    [ -n "$path" ] || return 1
+    [ -d "$path" ] || return 1
+
+    awk -v m="$path" '$2==m {print $4}' /proc/mounts | grep -Eq '(^|,)rw(,|$)' || return 1
+
+    touch "$path/.usb-log-mirror-write-test" 2>/dev/null || return 1
+    rm -f "$path/.usb-log-mirror-write-test" 2>/dev/null
+    return 0
+}
+
+detect_storage_mount() {
+    # 1) Prefer configured mount path if present and writable.
+    if is_path_writable_mount "$USB_MOUNT"; then
+        echo "$USB_MOUNT"
+        return 0
+    fi
+
+    # 2) Optional autodetect for USB/SD paths.
+    [ "$AUTO_DETECT_STORAGE" = "1" ] || return 1
+
+    for m in $PREFERRED_MOUNTS; do
+        if is_path_writable_mount "$m"; then
+            echo "$m"
+            return 0
+        fi
+    done
+
+    # 3) Fallback: scan /proc/mounts for common block devices.
+    for m in $(awk '$1 ~ /^\/dev\/(sd[a-z][0-9]*|mmcblk[0-9]+p?[0-9]*)$/ {print $2}' /proc/mounts); do
+        if is_path_writable_mount "$m"; then
+            echo "$m"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+refresh_paths() {
+    mount_path="$1"
+
+    [ -n "$mount_path" ] || return 1
+    USB_MOUNT="$mount_path"
+
+    if [ "$CUSTOM_LOG_DIR" -eq 0 ]; then
+        LOG_DIR="$USB_MOUNT/$LOG_SUBDIR"
+    fi
+
+    if [ "$CUSTOM_LOG_FILE" -eq 0 ]; then
+        LOG_FILE="$LOG_DIR/$LOG_NAME"
+    fi
+
     return 0
 }
 
@@ -51,7 +110,6 @@ rotate_copytruncate() {
 
     [ "$size_kb" -lt "$MAX_SIZE_KB" ] && return 0
 
-    # Shift old archives: .(n-1) -> .n
     i="$MAX_FILES"
     while [ "$i" -gt 1 ]; do
         prev=$((i - 1))
@@ -59,10 +117,9 @@ rotate_copytruncate() {
         i=$prev
     done
 
-    # copytruncate keeps current writer FD valid
     cp "$LOG_FILE" "$LOG_FILE.1" 2>/dev/null || return 1
     : > "$LOG_FILE" 2>/dev/null || return 1
-    log_msg "rotated $LOG_FILE at ${size_kb}KB (max=${MAX_SIZE_KB}KB, files=${MAX_FILES})"
+    log_msg "rotated $LOG_FILE at ${size_kb}KB (max=${MAX_SIZE_KB}KB files=${MAX_FILES})"
     return 0
 }
 
@@ -85,12 +142,19 @@ stream_logs() {
 }
 
 daemon() {
-    log_msg "daemon start (USB_MOUNT=$USB_MOUNT LOG_FILE=$LOG_FILE)"
+    log_msg "daemon start (configured USB_MOUNT=$USB_MOUNT)"
 
     while true; do
-        if ! is_mounted_rw; then
+        detected_mount=$(detect_storage_mount || true)
+        if [ -z "$detected_mount" ]; then
             sleep "$RETRY_SECONDS"
             continue
+        fi
+
+        if [ "$detected_mount" != "$ACTIVE_MOUNT" ]; then
+            refresh_paths "$detected_mount" || true
+            ACTIVE_MOUNT="$detected_mount"
+            log_msg "using storage mount: $ACTIVE_MOUNT (log: $LOG_FILE)"
         fi
 
         if ! ensure_paths; then
@@ -110,12 +174,18 @@ case "${1:-}" in
         daemon
         ;;
     rotate)
+        detected_mount=$(detect_storage_mount || true)
+        [ -n "$detected_mount" ] && refresh_paths "$detected_mount"
         rotate_copytruncate
         ;;
     check)
-        if is_mounted_rw && ensure_paths; then
-            echo "ok"
-            exit 0
+        detected_mount=$(detect_storage_mount || true)
+        if [ -n "$detected_mount" ]; then
+            refresh_paths "$detected_mount"
+            if ensure_paths; then
+                echo "ok: $detected_mount"
+                exit 0
+            fi
         fi
         echo "not-ready"
         exit 1
