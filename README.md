@@ -39,8 +39,8 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 ## 🔧 Manual install (exact commands)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-USB-Logs/main/usb-log-mirror.sh -o /usr/bin/usb-log-mirror.sh
-curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-USB-Logs/main/usb-log-mirror.init -o /etc/init.d/usb-log-mirror
+curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/usb-log-mirror.sh -o /usr/bin/usb-log-mirror.sh
+curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/usb-log-mirror.init -o /etc/init.d/usb-log-mirror
 chmod +x /usr/bin/usb-log-mirror.sh /etc/init.d/usb-log-mirror
 /etc/init.d/usb-log-mirror enable
 /etc/init.d/usb-log-mirror restart
@@ -93,7 +93,7 @@ If needed, these can be overridden by environment variables in the service comma
 ### One-line uninstall
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-USB-Logs/main/uninstall.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/uninstall.sh)"
 ```
 
 ### Manual uninstall
