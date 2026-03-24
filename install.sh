@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-REPO_BASE="${REPO_BASE:-https://raw.githubusercontent.com/zippyy/GL.iNet-USB-Logs/main}"
+REPO_BASE="${REPO_BASE:-https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main}"
 INIT_DST="/etc/init.d/usb-log-mirror"
 BIN_DST="/usr/bin/usb-log-mirror.sh"
 
