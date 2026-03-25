@@ -16,6 +16,7 @@ RETRY_SECONDS="${RETRY_SECONDS:-10}"
 CHECK_EVERY_LINES="${CHECK_EVERY_LINES:-50}"
 AUTO_DETECT_STORAGE="${AUTO_DETECT_STORAGE:-1}"
 PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1}"
+FALLBACK_LOCAL_DIR="${FALLBACK_LOCAL_DIR:-/logs-backup}"
 TAG="usb-log-mirror"
 
 # Optional explicit paths (if set, these are respected)
@@ -34,6 +35,7 @@ CUSTOM_LOG_FILE=0
 [ -n "${LOG_FILE:-}" ] && CUSTOM_LOG_FILE=1
 
 ACTIVE_MOUNT=""
+ACTIVE_TARGET="mount"
 
 log_msg() {
     logger -t "$TAG" "$*"
@@ -80,13 +82,15 @@ detect_storage_mount() {
 }
 
 refresh_paths() {
-    mount_path="$1"
+    root_path="$1"
+    target_type="${2:-mount}"
 
-    [ -n "$mount_path" ] || return 1
-    USB_MOUNT="$mount_path"
+    [ -n "$root_path" ] || return 1
+    ACTIVE_TARGET="$target_type"
+    [ "$target_type" = "mount" ] && USB_MOUNT="$root_path"
 
     if [ "$CUSTOM_LOG_DIR" -eq 0 ]; then
-        LOG_DIR="$USB_MOUNT/$LOG_SUBDIR"
+        LOG_DIR="$root_path/$LOG_SUBDIR"
     fi
 
     if [ "$CUSTOM_LOG_FILE" -eq 0 ]; then
@@ -142,19 +146,24 @@ stream_logs() {
 }
 
 daemon() {
-    log_msg "daemon start (configured USB_MOUNT=$USB_MOUNT)"
+    log_msg "daemon start (configured USB_MOUNT=$USB_MOUNT fallback=$FALLBACK_LOCAL_DIR)"
 
     while true; do
         detected_mount=$(detect_storage_mount || true)
-        if [ -z "$detected_mount" ]; then
-            sleep "$RETRY_SECONDS"
-            continue
+        target_key="$detected_mount"
+        target_type="mount"
+        target_root="$detected_mount"
+
+        if [ -z "$target_root" ]; then
+            target_key="local:$FALLBACK_LOCAL_DIR"
+            target_type="local"
+            target_root="$FALLBACK_LOCAL_DIR"
         fi
 
-        if [ "$detected_mount" != "$ACTIVE_MOUNT" ]; then
-            refresh_paths "$detected_mount" || true
-            ACTIVE_MOUNT="$detected_mount"
-            log_msg "using storage mount: $ACTIVE_MOUNT (log: $LOG_FILE)"
+        if [ "$target_key" != "$ACTIVE_MOUNT" ]; then
+            refresh_paths "$target_root" "$target_type" || true
+            ACTIVE_MOUNT="$target_key"
+            log_msg "using $target_type target: $target_root (log: $LOG_FILE)"
         fi
 
         if ! ensure_paths; then
@@ -175,17 +184,27 @@ case "${1:-}" in
         ;;
     rotate)
         detected_mount=$(detect_storage_mount || true)
-        [ -n "$detected_mount" ] && refresh_paths "$detected_mount"
+        if [ -n "$detected_mount" ]; then
+            refresh_paths "$detected_mount" "mount"
+        else
+            refresh_paths "$FALLBACK_LOCAL_DIR" "local"
+        fi
+        ensure_paths || exit 1
         rotate_copytruncate
         ;;
     check)
         detected_mount=$(detect_storage_mount || true)
         if [ -n "$detected_mount" ]; then
-            refresh_paths "$detected_mount"
+            refresh_paths "$detected_mount" "mount"
             if ensure_paths; then
                 echo "ok: $detected_mount"
                 exit 0
             fi
+        fi
+        refresh_paths "$FALLBACK_LOCAL_DIR" "local"
+        if ensure_paths; then
+            echo "ok-local: $FALLBACK_LOCAL_DIR"
+            exit 0
         fi
         echo "not-ready"
         exit 1
