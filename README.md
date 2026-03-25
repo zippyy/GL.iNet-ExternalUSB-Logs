@@ -71,6 +71,9 @@ chmod 0644 /etc/usb-log-mirror.conf
 ## Verify
 
 ```sh
+# one-liner: write a test entry and show the newest mirrored match
+TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)" && sleep 2 && grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
+
 # service status
 /etc/init.d/usb-log-mirror status
 
