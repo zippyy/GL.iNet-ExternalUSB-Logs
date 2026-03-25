@@ -40,10 +40,21 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 
 ## Config file (`/etc/usb-log-mirror.conf`)
 
+`USB_MOUNT` is the preferred path to try first. If it is not present, the script can auto-detect another writable USB/SD mount and, if none is available, fall back to local storage.
+
 ```sh
+# preferred mount to try first
 USB_MOUNT="/mnt/sda1"
+
+# set to 1 to auto-detect other USB/SD mounts when USB_MOUNT is unavailable
 AUTO_DETECT_STORAGE="1"
+
+# optional preferred candidates
 PREFERRED_MOUNTS="/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1"
+
+# local fallback when no removable writable storage is available
+FALLBACK_LOCAL_DIR="/logs-backup"
+
 LOG_SUBDIR="gl-usb-logs"
 LOG_NAME="system.log"
 MAX_SIZE_KB="5120"
