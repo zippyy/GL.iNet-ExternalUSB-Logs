@@ -125,9 +125,3 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 rm -f /etc/init.d/usb-log-mirror /usr/bin/usb-log-mirror.sh
 # optional: rm -f /etc/usb-log-mirror.conf
 ```
-
----
-
-## End-user support message
-
-"Your router logging stays exactly the same as stock GL.iNet/OpenWrt (`logread` continues to work normally). We only add a background service that copies those logs to persistent storage at `<detected_mount>/gl-usb-logs/system.log` when USB/SD storage is available, or `/logs-backup/gl-usb-logs/system.log` when local fallback is active, with automatic rotation to help prevent filling storage."
