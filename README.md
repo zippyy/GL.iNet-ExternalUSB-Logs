@@ -70,6 +70,8 @@ chmod 0644 /etc/usb-log-mirror.conf
 
 ## Verify
 
+`check` always prints `ok: <path>` on success, whether the active target is a USB/SD mount or the local fallback path. That keeps this simple parse stable:
+
 ```sh
 # service status
 /etc/init.d/usb-log-mirror status
@@ -80,7 +82,7 @@ logread | tail -n 20
 # show the active target path
 /usr/bin/usb-log-mirror.sh check
 
-# one-liner: write a test entry and show the newest mirrored match
+# simple one-liner: write a test entry and show the newest mirrored match
 TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)" && sleep 2 && grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
 
 # inspect the mirrored log output
