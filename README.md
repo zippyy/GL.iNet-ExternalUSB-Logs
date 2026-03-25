@@ -78,6 +78,9 @@ chmod 0644 /etc/usb-log-mirror.conf
 # normal OpenWrt logs still work
 logread | tail -n 20
 
+# One liner to check path:
+/usr/bin/usb-log-mirror.sh check
+
 # check selected target:
 # - "ok: <mount>" means USB/SD storage is active
 # - "ok-local: /logs-backup" means local fallback is active
