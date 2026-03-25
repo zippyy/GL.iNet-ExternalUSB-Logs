@@ -71,25 +71,20 @@ chmod 0644 /etc/usb-log-mirror.conf
 ## Verify
 
 ```sh
-# one-liner: write a test entry and show the newest mirrored match
-TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)" && sleep 2 && grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
-
 # service status
 /etc/init.d/usb-log-mirror status
 
 # normal OpenWrt logs still work
 logread | tail -n 20
 
-# easy verify: resolve the active target, emit a test line, and show the match
-TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')"
-logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)"
-sleep 2
-grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
+# show the active target path
+/usr/bin/usb-log-mirror.sh check
 
-# show which target is active (USB/SD mount or fallback local path)
-printf 'Active target: %s\n' "$TARGET"
+# one-liner: write a test entry and show the newest mirrored match
+TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)" && sleep 2 && grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
 
 # inspect the mirrored log output
+TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')"
 ls -lah "$TARGET/gl-usb-logs/"
 tail -n 20 "$TARGET/gl-usb-logs/system.log"
 ```
