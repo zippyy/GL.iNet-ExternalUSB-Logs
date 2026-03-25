@@ -129,20 +129,72 @@ rotate_copytruncate() {
 
 stream_logs() {
     line_count=0
+    fifo_path="/tmp/usb-log-mirror.$$.fifo"
+    poll_count=0
+    poll_interval="$RETRY_SECONDS"
+
+    case "$poll_interval" in
+        ''|*[!0-9]*|0)
+            poll_interval=1
+            ;;
+    esac
+
+    rm -f "$fifo_path"
+    mkfifo "$fifo_path" 2>/dev/null || return 1
+
     log_msg "stream start -> $LOG_FILE"
 
-    logread -f 2>/dev/null | while IFS= read -r line; do
-        printf '%s\n' "$line" >> "$LOG_FILE" || exit 1
-        line_count=$((line_count + 1))
+    logread -f >"$fifo_path" 2>/dev/null &
+    reader_pid=$!
 
-        if [ $((line_count % CHECK_EVERY_LINES)) -eq 0 ]; then
-            rotate_copytruncate || true
+    exec 3<"$fifo_path"
+    rm -f "$fifo_path"
+
+    while true; do
+        if IFS= read -r -t 1 line <&3; then
+            printf '%s\n' "$line" >> "$LOG_FILE" || break
+            line_count=$((line_count + 1))
+
+            if [ $((line_count % CHECK_EVERY_LINES)) -eq 0 ]; then
+                rotate_copytruncate || true
+            fi
+        else
+            poll_count=$((poll_count + 1))
+
+            if ! kill -0 "$reader_pid" 2>/dev/null; then
+                wait "$reader_pid"
+                rc=$?
+                exec 3<&-
+                log_msg "stream ended rc=$rc"
+                return "$rc"
+            fi
+
+            if [ "$ACTIVE_TARGET" = "local" ] || [ $((poll_count % poll_interval)) -eq 0 ]; then
+                detected_mount=$(detect_storage_mount || true)
+                if [ -n "$detected_mount" ]; then
+                    if [ "mount:$detected_mount" != "$ACTIVE_MOUNT" ]; then
+                        kill "$reader_pid" 2>/dev/null || true
+                        wait "$reader_pid" 2>/dev/null || true
+                        exec 3<&-
+                        log_msg "switching to mount target: $detected_mount"
+                        return 10
+                    fi
+                elif [ "$ACTIVE_TARGET" = "mount" ]; then
+                    kill "$reader_pid" 2>/dev/null || true
+                    wait "$reader_pid" 2>/dev/null || true
+                    exec 3<&-
+                    log_msg "mount target unavailable; switching to fallback"
+                    return 11
+                fi
+            fi
         fi
     done
 
-    rc=$?
-    log_msg "stream ended rc=$rc"
-    return "$rc"
+    kill "$reader_pid" 2>/dev/null || true
+    wait "$reader_pid" 2>/dev/null || true
+    exec 3<&-
+    log_msg "stream ended rc=1"
+    return 1
 }
 
 daemon() {
@@ -203,7 +255,7 @@ case "${1:-}" in
         fi
         refresh_paths "$FALLBACK_LOCAL_DIR" "local"
         if ensure_paths; then
-            echo "ok-local: $FALLBACK_LOCAL_DIR"
+            echo "ok: $FALLBACK_LOCAL_DIR"
             exit 0
         fi
         echo "not-ready"
