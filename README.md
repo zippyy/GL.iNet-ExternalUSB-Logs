@@ -1,6 +1,7 @@
 # GL.iNet External USB Logs (GL-XE300 / OpenWrt)
 
 Persistent USB log mirror for GL.iNet/OpenWrt routers that keeps **default logging behavior unchanged** while writing a copy to USB.
+On branch `mudi7`, it also mirrors cellular and modem log files when those source files are present.
 
 ---
 
@@ -24,7 +25,7 @@ This project mirrors logs to USB so they survive reboots while preserving normal
 ## One-line install
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/install.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/mudi7/install.sh)"
 ```
 
 ---
@@ -35,6 +36,7 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 - `/etc/init.d/usb-log-mirror`
 - `/etc/usb-log-mirror.conf`
 - Default log output: `<detected_mount>/gl-usb-logs/system.log` (for example `/mnt/sda1/gl-usb-logs/system.log`)
+- Additional mirrored logs when source files exist: `<detected_mount>/gl-usb-logs/cellular.log` and `<detected_mount>/gl-usb-logs/modem.log`
 
 ---
 
@@ -57,6 +59,10 @@ FALLBACK_LOCAL_DIR="/logs-backup"
 
 LOG_SUBDIR="gl-usb-logs"
 LOG_NAME="system.log"
+CELLULAR_LOG_NAME="cellular.log"
+MODEM_LOG_NAME="modem.log"
+CELLULAR_LOG_CANDIDATES="/var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log"
+MODEM_LOG_CANDIDATES="/var/log/modem.log /tmp/modem.log /tmp/run/modem.log"
 MAX_SIZE_KB="5120"
 MAX_FILES="5"
 RETRY_SECONDS="10"
@@ -68,9 +74,9 @@ CHECK_EVERY_LINES="50"
 ## Manual install commands
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/usb-log-mirror.sh -o /usr/bin/usb-log-mirror.sh
-curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/usb-log-mirror.init -o /etc/init.d/usb-log-mirror
-curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/usb-log-mirror.conf -o /etc/usb-log-mirror.conf
+curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/mudi7/usb-log-mirror.sh -o /usr/bin/usb-log-mirror.sh
+curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/mudi7/usb-log-mirror.init -o /etc/init.d/usb-log-mirror
+curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/mudi7/usb-log-mirror.conf -o /etc/usb-log-mirror.conf
 chmod +x /usr/bin/usb-log-mirror.sh /etc/init.d/usb-log-mirror
 chmod 0644 /etc/usb-log-mirror.conf
 /etc/init.d/usb-log-mirror enable
@@ -96,6 +102,9 @@ logread | tail -n 20
 # simple one-liner: write a test entry and show the newest mirrored match
 TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && logger -t usb-log-mirror-test "USB mirror verification $(date -Iseconds)" && sleep 2 && grep -n "usb-log-mirror-test" "$TARGET/gl-usb-logs/system.log" | tail -n 1
 
+# mudi7 one-liner: list and tail the mirrored system, cellular, and modem logs that exist
+TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')" && ls -lah "$TARGET/gl-usb-logs/" && for f in system.log cellular.log modem.log; do [ -f "$TARGET/gl-usb-logs/$f" ] && echo "==> $f <==" && tail -n 5 "$TARGET/gl-usb-logs/$f"; done
+
 # inspect the mirrored log output
 TARGET="$(/usr/bin/usb-log-mirror.sh check | sed -n 's/^ok: //p')"
 ls -lah "$TARGET/gl-usb-logs/"
@@ -109,7 +118,7 @@ tail -n 20 "$TARGET/gl-usb-logs/system.log"
 ### One-line uninstall
 
 ```sh
-sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/main/uninstall.sh)"
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB-Logs/mudi7/uninstall.sh)"
 ```
 
 ### Manual uninstall
@@ -125,4 +134,4 @@ rm -f /etc/init.d/usb-log-mirror /usr/bin/usb-log-mirror.sh
 
 ## End-user support message
 
-"Your router logging stays exactly the same as stock GL.iNet/OpenWrt (`logread` continues to work normally). We only add a background service that copies those logs to USB for persistence at `<detected_mount>/gl-usb-logs/system.log`, with automatic rotation to help prevent filling the USB drive."
+"Your router logging stays exactly the same as stock GL.iNet/OpenWrt (`logread` continues to work normally). We only add a background service that copies those logs to USB for persistence at `<detected_mount>/gl-usb-logs/system.log`, and on `mudi7` it also mirrors cellular and modem log files when those source files exist, with automatic rotation on the main system log to help prevent filling the USB drive."

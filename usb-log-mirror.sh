@@ -10,6 +10,8 @@ CONFIG_FILE="${USB_LOG_MIRROR_CONFIG:-/etc/usb-log-mirror.conf}"
 USB_MOUNT="${USB_MOUNT:-/mnt/sda1}"
 LOG_SUBDIR="${LOG_SUBDIR:-gl-usb-logs}"
 LOG_NAME="${LOG_NAME:-system.log}"
+CELLULAR_LOG_NAME="${CELLULAR_LOG_NAME:-cellular.log}"
+MODEM_LOG_NAME="${MODEM_LOG_NAME:-modem.log}"
 MAX_SIZE_KB="${MAX_SIZE_KB:-5120}"
 MAX_FILES="${MAX_FILES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-10}"
@@ -17,6 +19,8 @@ CHECK_EVERY_LINES="${CHECK_EVERY_LINES:-50}"
 AUTO_DETECT_STORAGE="${AUTO_DETECT_STORAGE:-1}"
 PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1}"
 FALLBACK_LOCAL_DIR="${FALLBACK_LOCAL_DIR:-/logs-backup}"
+CELLULAR_LOG_CANDIDATES="${CELLULAR_LOG_CANDIDATES:-/var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log}"
+MODEM_LOG_CANDIDATES="${MODEM_LOG_CANDIDATES:-/var/log/modem.log /tmp/modem.log /tmp/run/modem.log}"
 TAG="usb-log-mirror"
 
 # Optional explicit paths (if set, these are respected)
@@ -36,6 +40,8 @@ CUSTOM_LOG_FILE=0
 
 ACTIVE_MOUNT=""
 ACTIVE_TARGET="mount"
+CELLULAR_MIRROR_PID=""
+MODEM_MIRROR_PID=""
 
 log_msg() {
     logger -t "$TAG" "$*"
@@ -106,6 +112,17 @@ ensure_paths() {
     return 0
 }
 
+resolve_first_readable() {
+    for candidate in $1; do
+        if [ -f "$candidate" ] && [ -r "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 rotate_copytruncate() {
     [ -f "$LOG_FILE" ] || return 0
 
@@ -125,6 +142,53 @@ rotate_copytruncate() {
     : > "$LOG_FILE" 2>/dev/null || return 1
     log_msg "rotated $LOG_FILE at ${size_kb}KB (max=${MAX_SIZE_KB}KB files=${MAX_FILES})"
     return 0
+}
+
+mirror_extra_log_loop() {
+    log_kind="$1"
+    source_candidates="$2"
+    destination_name="$3"
+    target_file="$LOG_DIR/$destination_name"
+
+    while true; do
+        source_file=$(resolve_first_readable "$source_candidates" || true)
+
+        if [ -z "$source_file" ]; then
+            sleep "$RETRY_SECONDS"
+            continue
+        fi
+
+        mkdir -p "$LOG_DIR" 2>/dev/null || true
+        touch "$target_file" 2>/dev/null || true
+        log_msg "mirroring $log_kind log: $source_file -> $target_file"
+
+        tail -n 0 -f "$source_file" >> "$target_file" 2>/dev/null
+        sleep 1
+    done
+}
+
+start_extra_log_mirrors() {
+    stop_extra_log_mirrors
+
+    mirror_extra_log_loop "cellular" "$CELLULAR_LOG_CANDIDATES" "$CELLULAR_LOG_NAME" &
+    CELLULAR_MIRROR_PID=$!
+
+    mirror_extra_log_loop "modem" "$MODEM_LOG_CANDIDATES" "$MODEM_LOG_NAME" &
+    MODEM_MIRROR_PID=$!
+}
+
+stop_extra_log_mirrors() {
+    if [ -n "$CELLULAR_MIRROR_PID" ]; then
+        kill "$CELLULAR_MIRROR_PID" 2>/dev/null || true
+        wait "$CELLULAR_MIRROR_PID" 2>/dev/null || true
+        CELLULAR_MIRROR_PID=""
+    fi
+
+    if [ -n "$MODEM_MIRROR_PID" ]; then
+        kill "$MODEM_MIRROR_PID" 2>/dev/null || true
+        wait "$MODEM_MIRROR_PID" 2>/dev/null || true
+        MODEM_MIRROR_PID=""
+    fi
 }
 
 stream_logs() {
@@ -225,7 +289,9 @@ daemon() {
         fi
 
         rotate_copytruncate || true
+        start_extra_log_mirrors
         stream_logs
+        stop_extra_log_mirrors
         sleep 2
     done
 }
