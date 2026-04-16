@@ -1,7 +1,7 @@
 # GL.iNet External USB Logs (GL-XE300 / OpenWrt)
 
 Persistent USB log mirror for GL.iNet/OpenWrt routers that keeps **default logging behavior unchanged** while writing a copy to USB.
-On branch `mudi7`, it also mirrors cellular and modem log files when those source files are present.
+On branch `mudi7`, it also mirrors cellular and modem log files when those source files are present, and it only auto-detects external USB mounts instead of internal `mmc` storage.
 
 ---
 
@@ -42,17 +42,17 @@ sh -c "$(curl -fsSL https://raw.githubusercontent.com/zippyy/GL.iNet-ExternalUSB
 
 ## Config file (`/etc/usb-log-mirror.conf`)
 
-`USB_MOUNT` is the preferred path to try first. If it is not present, the script can auto-detect another writable USB/SD mount and, if none is available, fall back to local storage.
+`USB_MOUNT` is the preferred path to try first. If it is not present, the script can auto-detect another writable external USB mount and, if none is available, fall back to local storage.
 
 ```sh
 # preferred mount to try first
 USB_MOUNT="/mnt/sda1"
 
-# set to 1 to auto-detect other USB/SD mounts when USB_MOUNT is unavailable
+# set to 1 to auto-detect other external USB mounts when USB_MOUNT is unavailable
 AUTO_DETECT_STORAGE="1"
 
 # optional preferred candidates
-PREFERRED_MOUNTS="/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1"
+PREFERRED_MOUNTS="/mnt/sda1 /mnt/sdb1"
 
 # local fallback when no removable writable storage is available
 FALLBACK_LOCAL_DIR="/logs-backup"
@@ -61,13 +61,15 @@ LOG_SUBDIR="gl-usb-logs"
 LOG_NAME="system.log"
 CELLULAR_LOG_NAME="cellular.log"
 MODEM_LOG_NAME="modem.log"
-CELLULAR_LOG_CANDIDATES="/var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log"
-MODEM_LOG_CANDIDATES="/var/log/modem.log /tmp/modem.log /tmp/run/modem.log"
+CELLULAR_LOG_CANDIDATES="/tmp/quectel_slic_daemon.log /tmp/gl_modem_traffic/cpu/total_5g /tmp/gl_modem_traffic/cpu/total_4g /var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log"
+MODEM_LOG_CANDIDATES="/tmp/quectel_voice_server.log /var/log/modem.log /tmp/modem.log /tmp/run/modem.log"
 MAX_SIZE_KB="5120"
 MAX_FILES="5"
 RETRY_SECONDS="10"
 CHECK_EVERY_LINES="50"
 ```
+
+On a GL-E5800/Mudi 7, the default extra log candidates now prefer `/tmp/quectel_slic_daemon.log` for `cellular.log` and `/tmp/quectel_voice_server.log` for `modem.log`. Override the candidate lists in `/etc/usb-log-mirror.conf` if your firmware writes them elsewhere.
 
 ---
 

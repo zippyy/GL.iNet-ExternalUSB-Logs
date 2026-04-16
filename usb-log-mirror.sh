@@ -17,10 +17,10 @@ MAX_FILES="${MAX_FILES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-10}"
 CHECK_EVERY_LINES="${CHECK_EVERY_LINES:-50}"
 AUTO_DETECT_STORAGE="${AUTO_DETECT_STORAGE:-1}"
-PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1}"
+PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1}"
 FALLBACK_LOCAL_DIR="${FALLBACK_LOCAL_DIR:-/logs-backup}"
-CELLULAR_LOG_CANDIDATES="${CELLULAR_LOG_CANDIDATES:-/var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log}"
-MODEM_LOG_CANDIDATES="${MODEM_LOG_CANDIDATES:-/var/log/modem.log /tmp/modem.log /tmp/run/modem.log}"
+CELLULAR_LOG_CANDIDATES="${CELLULAR_LOG_CANDIDATES:-/tmp/quectel_slic_daemon.log /tmp/gl_modem_traffic/cpu/total_5g /tmp/gl_modem_traffic/cpu/total_4g /var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log}"
+MODEM_LOG_CANDIDATES="${MODEM_LOG_CANDIDATES:-/tmp/quectel_voice_server.log /var/log/modem.log /tmp/modem.log /tmp/run/modem.log}"
 TAG="usb-log-mirror"
 
 # Optional explicit paths (if set, these are respected)
@@ -66,7 +66,7 @@ detect_storage_mount() {
         return 0
     fi
 
-    # 2) Optional autodetect for USB/SD paths.
+    # 2) Optional autodetect for preferred external USB paths.
     [ "$AUTO_DETECT_STORAGE" = "1" ] || return 1
 
     for m in $PREFERRED_MOUNTS; do
@@ -76,8 +76,8 @@ detect_storage_mount() {
         fi
     done
 
-    # 3) Fallback: scan /proc/mounts for common block devices.
-    for m in $(awk '$1 ~ /^\/dev\/(sd[a-z][0-9]*|mmcblk[0-9]+p?[0-9]*)$/ {print $2}' /proc/mounts); do
+    # 3) Fallback: scan /proc/mounts for USB block devices only.
+    for m in $(awk '$1 ~ /^\/dev\/sd[a-z][0-9]*$/ {print $2}' /proc/mounts); do
         if is_path_writable_mount "$m"; then
             echo "$m"
             return 0
