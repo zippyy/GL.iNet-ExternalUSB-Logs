@@ -311,14 +311,16 @@ daemon() {
 
     while true; do
         detected_mount=$(detect_storage_mount || true)
-        target_key="$detected_mount"
         target_type="mount"
         target_root="$detected_mount"
+        target_key=""
 
         if [ -z "$target_root" ]; then
             target_key="local:$FALLBACK_LOCAL_DIR"
             target_type="local"
             target_root="$FALLBACK_LOCAL_DIR"
+        else
+            target_key="mount:$target_root"
         fi
 
         if [ "$target_key" != "$ACTIVE_MOUNT" ]; then
