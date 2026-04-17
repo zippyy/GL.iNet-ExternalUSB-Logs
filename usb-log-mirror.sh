@@ -144,17 +144,31 @@ rotate_copytruncate() {
     return 0
 }
 
+cleanup_extra_log_tail() {
+    tail_pid="${1:-}"
+
+    if [ -n "$tail_pid" ]; then
+        kill "$tail_pid" 2>/dev/null || true
+        wait "$tail_pid" 2>/dev/null || true
+    fi
+}
+
 mirror_extra_log_loop() {
     log_kind="$1"
     source_candidates="$2"
     destination_name="$3"
     target_file="$LOG_DIR/$destination_name"
     current_source=""
+    tail_pid=""
+
+    trap 'cleanup_extra_log_tail "$tail_pid"; exit 0' INT TERM
 
     while true; do
         source_file=$(resolve_first_readable "$source_candidates" || true)
 
         if [ -z "$source_file" ]; then
+            cleanup_extra_log_tail "$tail_pid"
+            tail_pid=""
             current_source=""
             sleep "$RETRY_SECONDS"
             continue
@@ -162,13 +176,18 @@ mirror_extra_log_loop() {
 
         mkdir -p "$LOG_DIR" 2>/dev/null || true
         touch "$target_file" 2>/dev/null || true
-        
+
         if [ "$current_source" != "$source_file" ]; then
+            cleanup_extra_log_tail "$tail_pid"
+            tail_pid=""
             current_source="$source_file"
             log_msg "mirroring $log_kind log: $source_file -> $target_file"
         fi
 
-        tail -n 0 -f "$source_file" >> "$target_file" 2>/dev/null
+        tail -n 0 -f "$source_file" >> "$target_file" 2>/dev/null &
+        tail_pid=$!
+        wait "$tail_pid" 2>/dev/null || true
+        tail_pid=""
         sleep 1
     done
 }
