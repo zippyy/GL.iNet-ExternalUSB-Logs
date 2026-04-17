@@ -34,8 +34,8 @@ fi
 chmod 0755 "$BIN_DST" "$INIT_DST"
 chmod 0644 "$CONF_DST"
 
-"$INIT_DST" enable || echo "[usb-log-mirror] Skipping enable (not supported on this firmware)."
-"$INIT_DST" restart || true
+"$INIT_DST" enable >/dev/null 2>&1 || echo "[usb-log-mirror] Skipping enable (not supported on this firmware)."
+"$INIT_DST" restart >/dev/null 2>&1 || true
 
 echo "[usb-log-mirror] Done."
 "$INIT_DST" status || true
