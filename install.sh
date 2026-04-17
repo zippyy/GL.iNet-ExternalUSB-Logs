@@ -24,12 +24,13 @@ echo "[usb-log-mirror] Installing..."
 fetch "$REPO_BASE/usb-log-mirror.sh" "$BIN_DST"
 fetch "$REPO_BASE/usb-log-mirror.init" "$INIT_DST"
 
-if [ ! -f "$CONF_DST" ]; then
-    fetch "$REPO_BASE/usb-log-mirror.conf" "$CONF_DST"
-    echo "[usb-log-mirror] Installed default config at $CONF_DST"
-else
-    echo "[usb-log-mirror] Keeping existing config at $CONF_DST"
+if [ -f "$CONF_DST" ]; then
+    cp "$CONF_DST" "$CONF_DST.bak" 2>/dev/null || true
+    echo "[usb-log-mirror] Backed up existing config to $CONF_DST.bak"
 fi
+
+fetch "$REPO_BASE/usb-log-mirror.conf" "$CONF_DST"
+echo "[usb-log-mirror] Installed config at $CONF_DST"
 
 chmod 0755 "$BIN_DST" "$INIT_DST"
 chmod 0644 "$CONF_DST"

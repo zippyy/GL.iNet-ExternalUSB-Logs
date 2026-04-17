@@ -62,14 +62,14 @@ LOG_NAME="system.log"
 CELLULAR_LOG_NAME="cellular.log"
 MODEM_LOG_NAME="modem.log"
 CELLULAR_LOG_PATTERN="cellular|signal|sim|apn|netmgr|wwan|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp"
-MODEM_LOG_PATTERN="modem|quectel|qmi|mbim|rmt_storage|modem_fs|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp"
+MODEM_LOG_PATTERN="modem|quectel|mbim|rmt_storage|modem_fs|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp"
 MAX_SIZE_KB="5120"
 MAX_FILES="5"
 RETRY_SECONDS="10"
 CHECK_EVERY_LINES="50"
 ```
 
-On a GL-E5800/Mudi 7, the sidecar logs are more useful when filtered from `logread` than when copied from quiet temporary files. The default patterns include the modem/RIL-style lines this device emits, and startup backfill seeds those sidecars from the current `logread` buffer. Override the regex patterns in `/etc/usb-log-mirror.conf` if you want narrower or broader matching.
+On a GL-E5800/Mudi 7, the sidecar logs are more useful when filtered from `logread` than when copied from quiet temporary files. The default patterns include the modem/RIL-style lines this device emits, startup backfill seeds those sidecars from the current `logread` buffer, and reinstall now refreshes `/etc/usb-log-mirror.conf` while keeping a `.bak` copy. Override the regex patterns in `/etc/usb-log-mirror.conf` if you want narrower or broader matching.
 
 ---
 
