@@ -34,8 +34,11 @@ fi
 chmod 0755 "$BIN_DST" "$INIT_DST"
 chmod 0644 "$CONF_DST"
 
-"$INIT_DST" enable >/dev/null 2>&1 || echo "[usb-log-mirror] Skipping enable (not supported on this firmware)."
-"$INIT_DST" restart >/dev/null 2>&1 || true
+# Some GL.iNet/OpenWrt builds emit noisy "Command failed: Not found" errors
+# for rc.common helper actions like "enable" and "restart" even when the
+# service itself works. Keep install simple: start the service directly.
+"$INIT_DST" stop >/dev/null 2>&1 || true
+"$INIT_DST" start >/dev/null 2>&1 || true
 
 echo "[usb-log-mirror] Done."
 "$INIT_DST" status || true
