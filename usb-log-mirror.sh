@@ -12,8 +12,8 @@ LOG_SUBDIR="${LOG_SUBDIR:-gl-usb-logs}"
 LOG_NAME="${LOG_NAME:-system.log}"
 CELLULAR_LOG_NAME="${CELLULAR_LOG_NAME:-cellular.log}"
 MODEM_LOG_NAME="${MODEM_LOG_NAME:-modem.log}"
-CELLULAR_LOG_PATTERN="${CELLULAR_LOG_PATTERN:-cellular|qmi|mbim|wwan|signal|sim|apn|netmgr}"
-MODEM_LOG_PATTERN="${MODEM_LOG_PATTERN:-modem|quectel|qmi|mbim|rmt_storage|modem_fs}"
+CELLULAR_LOG_PATTERN="${CELLULAR_LOG_PATTERN:-cellular|signal|sim|apn|netmgr|wwan|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp}"
+MODEM_LOG_PATTERN="${MODEM_LOG_PATTERN:-modem|quectel|qmi|mbim|rmt_storage|modem_fs|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp}"
 MAX_SIZE_KB="${MAX_SIZE_KB:-5120}"
 MAX_FILES="${MAX_FILES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-10}"
@@ -148,6 +148,12 @@ seed_filtered_logs() {
     return 0
 }
 
+should_skip_sidecar_line() {
+    line="$1"
+    printf '%s\n' "$line" | grep -Eiq "$TAG" && return 0
+    return 1
+}
+
 
 stream_logs() {
     line_count=0
@@ -178,12 +184,12 @@ stream_logs() {
         if IFS= read -r -t 1 line <&3; then
             printf '%s\n' "$line" >> "$LOG_FILE" || break
 
-            if printf '%s\n' "$line" | grep -Eiq "$CELLULAR_LOG_PATTERN"; then
+            if ! should_skip_sidecar_line "$line" && printf '%s\n' "$line" | grep -Eiq "$CELLULAR_LOG_PATTERN"; then
                 [ "$cellular_logged" -eq 0 ] && log_msg "filtering cellular log -> $LOG_DIR/$CELLULAR_LOG_NAME" && cellular_logged=1
                 printf '%s\n' "$line" >> "$LOG_DIR/$CELLULAR_LOG_NAME" || true
             fi
 
-            if printf '%s\n' "$line" | grep -Eiq "$MODEM_LOG_PATTERN"; then
+            if ! should_skip_sidecar_line "$line" && printf '%s\n' "$line" | grep -Eiq "$MODEM_LOG_PATTERN"; then
                 [ "$modem_logged" -eq 0 ] && log_msg "filtering modem log -> $LOG_DIR/$MODEM_LOG_NAME" && modem_logged=1
                 printf '%s\n' "$line" >> "$LOG_DIR/$MODEM_LOG_NAME" || true
             fi

@@ -1,7 +1,7 @@
 # GL.iNet External USB Logs (GL-XE300 / OpenWrt)
 
 Persistent USB log mirror for GL.iNet/OpenWrt routers that keeps **default logging behavior unchanged** while writing a copy to USB.
-On branch `mudi7`, it also writes filtered `cellular.log` and `modem.log` sidecar files from the live `logread` stream.
+On branch `mudi7`, it also writes filtered `cellular.log` and `modem.log` sidecar files from the live `logread` stream and seeds them from the current log buffer on startup.
 
 ---
 
@@ -61,15 +61,15 @@ LOG_SUBDIR="gl-usb-logs"
 LOG_NAME="system.log"
 CELLULAR_LOG_NAME="cellular.log"
 MODEM_LOG_NAME="modem.log"
-CELLULAR_LOG_PATTERN="cellular|qmi|mbim|wwan|signal|sim|apn|netmgr"
-MODEM_LOG_PATTERN="modem|quectel|qmi|mbim|rmt_storage|modem_fs"
+CELLULAR_LOG_PATTERN="cellular|signal|sim|apn|netmgr|wwan|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp"
+MODEM_LOG_PATTERN="modem|quectel|qmi|mbim|rmt_storage|modem_fs|ql_ril|ql_sdk_api|diag_lib|nr5g|3gpp"
 MAX_SIZE_KB="5120"
 MAX_FILES="5"
 RETRY_SECONDS="10"
 CHECK_EVERY_LINES="50"
 ```
 
-On a GL-E5800/Mudi 7, the sidecar logs are more useful when filtered from `logread` than when copied from quiet temporary files. Override the regex patterns in `/etc/usb-log-mirror.conf` if you want narrower or broader matching.
+On a GL-E5800/Mudi 7, the sidecar logs are more useful when filtered from `logread` than when copied from quiet temporary files. The default patterns include the modem/RIL-style lines this device emits, and startup backfill seeds those sidecars from the current `logread` buffer. Override the regex patterns in `/etc/usb-log-mirror.conf` if you want narrower or broader matching.
 
 ---
 
