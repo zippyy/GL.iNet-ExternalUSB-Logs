@@ -42,6 +42,7 @@ ACTIVE_MOUNT=""
 ACTIVE_TARGET="mount"
 CELLULAR_MIRROR_PID=""
 MODEM_MIRROR_PID=""
+STATE_DIR="/tmp/usb-log-mirror-state"
 
 log_msg() {
     logger -t "$TAG" "$*"
@@ -112,6 +113,11 @@ ensure_paths() {
     return 0
 }
 
+ensure_state_dir() {
+    mkdir -p "$STATE_DIR" 2>/dev/null || return 1
+    return 0
+}
+
 resolve_first_readable() {
     for candidate in $1; do
         if [ -f "$candidate" ] && [ -r "$candidate" ]; then
@@ -149,6 +155,8 @@ mirror_extra_log_loop() {
     source_candidates="$2"
     destination_name="$3"
     target_file="$LOG_DIR/$destination_name"
+    state_source="$STATE_DIR/$log_kind.source"
+    state_offset="$STATE_DIR/$log_kind.offset"
 
     while true; do
         source_file=$(resolve_first_readable "$source_candidates" || true)
@@ -160,15 +168,52 @@ mirror_extra_log_loop() {
 
         mkdir -p "$LOG_DIR" 2>/dev/null || true
         touch "$target_file" 2>/dev/null || true
-        log_msg "mirroring $log_kind log: $source_file -> $target_file"
+        ensure_state_dir || true
 
-        tail -n 0 -f "$source_file" >> "$target_file" 2>/dev/null
+        current_source=""
+        [ -f "$state_source" ] && current_source=$(cat "$state_source" 2>/dev/null || true)
+        current_offset=""
+        [ -f "$state_offset" ] && current_offset=$(cat "$state_offset" 2>/dev/null || true)
+
+        source_size=$(wc -c < "$source_file" 2>/dev/null || echo 0)
+
+        case "$source_size" in
+            ''|*[!0-9]*)
+                source_size=0
+                ;;
+        esac
+
+        case "$current_offset" in
+            ''|*[!0-9]*)
+                current_offset=""
+                ;;
+        esac
+
+        if [ "$current_source" != "$source_file" ] || [ -z "$current_offset" ]; then
+            printf '%s\n' "$source_file" > "$state_source"
+            printf '%s\n' "$source_size" > "$state_offset"
+            log_msg "mirroring $log_kind log: $source_file -> $target_file"
+            sleep 1
+            continue
+        fi
+
+        if [ "$source_size" -lt "$current_offset" ]; then
+            printf '%s\n' "0" > "$state_offset"
+            current_offset=0
+        fi
+
+        if [ "$source_size" -gt "$current_offset" ]; then
+            dd if="$source_file" bs=1 skip="$current_offset" 2>/dev/null >> "$target_file" || true
+            printf '%s\n' "$source_size" > "$state_offset"
+        fi
+
         sleep 1
     done
 }
 
 start_extra_log_mirrors() {
     stop_extra_log_mirrors
+    rm -f "$STATE_DIR"/cellular.source "$STATE_DIR"/cellular.offset "$STATE_DIR"/modem.source "$STATE_DIR"/modem.offset 2>/dev/null || true
 
     mirror_extra_log_loop "cellular" "$CELLULAR_LOG_CANDIDATES" "$CELLULAR_LOG_NAME" &
     CELLULAR_MIRROR_PID=$!
