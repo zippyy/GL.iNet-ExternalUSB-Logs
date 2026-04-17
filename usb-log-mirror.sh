@@ -133,6 +133,21 @@ rotate_copytruncate() {
     return 0
 }
 
+seed_filtered_logs() {
+    seed_source="/tmp/usb-log-mirror-seed.$$"
+
+    logread >"$seed_source" 2>/dev/null || {
+        rm -f "$seed_source"
+        return 1
+    }
+
+    grep -Eiv "$TAG" "$seed_source" | grep -Ei "$CELLULAR_LOG_PATTERN" > "$LOG_DIR/$CELLULAR_LOG_NAME" 2>/dev/null || : > "$LOG_DIR/$CELLULAR_LOG_NAME"
+    grep -Eiv "$TAG" "$seed_source" | grep -Ei "$MODEM_LOG_PATTERN" > "$LOG_DIR/$MODEM_LOG_NAME" 2>/dev/null || : > "$LOG_DIR/$MODEM_LOG_NAME"
+
+    rm -f "$seed_source"
+    return 0
+}
+
 
 stream_logs() {
     line_count=0
@@ -247,6 +262,7 @@ daemon() {
         fi
 
         rotate_copytruncate || true
+        seed_filtered_logs || true
         stream_logs
         sleep 2
     done
