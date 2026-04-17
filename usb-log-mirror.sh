@@ -12,6 +12,8 @@ LOG_SUBDIR="${LOG_SUBDIR:-gl-usb-logs}"
 LOG_NAME="${LOG_NAME:-system.log}"
 CELLULAR_LOG_NAME="${CELLULAR_LOG_NAME:-cellular.log}"
 MODEM_LOG_NAME="${MODEM_LOG_NAME:-modem.log}"
+CELLULAR_LOG_PATTERN="${CELLULAR_LOG_PATTERN:-cellular|qmi|mbim|wwan|signal|sim|apn|netmgr}"
+MODEM_LOG_PATTERN="${MODEM_LOG_PATTERN:-modem|quectel|qmi|mbim|rmt_storage|modem_fs}"
 MAX_SIZE_KB="${MAX_SIZE_KB:-5120}"
 MAX_FILES="${MAX_FILES:-5}"
 RETRY_SECONDS="${RETRY_SECONDS:-10}"
@@ -19,8 +21,6 @@ CHECK_EVERY_LINES="${CHECK_EVERY_LINES:-50}"
 AUTO_DETECT_STORAGE="${AUTO_DETECT_STORAGE:-1}"
 PREFERRED_MOUNTS="${PREFERRED_MOUNTS:-/mnt/sda1 /mnt/sdb1 /mnt/mmcblk0p1 /mnt/mmcblk1p1}"
 FALLBACK_LOCAL_DIR="${FALLBACK_LOCAL_DIR:-/logs-backup}"
-CELLULAR_LOG_CANDIDATES="${CELLULAR_LOG_CANDIDATES:-/tmp/quectel_slic_daemon.log /tmp/gl_modem_traffic/cpu/total_5g /tmp/gl_modem_traffic/cpu/total_4g /var/log/cellular.log /tmp/cellular.log /tmp/run/cellular.log}"
-MODEM_LOG_CANDIDATES="${MODEM_LOG_CANDIDATES:-/tmp/quectel_voice_server.log /var/log/modem.log /tmp/modem.log /tmp/run/modem.log}"
 TAG="usb-log-mirror"
 
 # Optional explicit paths (if set, these are respected)
@@ -40,8 +40,6 @@ CUSTOM_LOG_FILE=0
 
 ACTIVE_MOUNT=""
 ACTIVE_TARGET="mount"
-CELLULAR_MIRROR_PID=""
-MODEM_MIRROR_PID=""
 
 log_msg() {
     logger -t "$TAG" "$*"
@@ -109,18 +107,9 @@ refresh_paths() {
 ensure_paths() {
     mkdir -p "$LOG_DIR" 2>/dev/null || return 1
     touch "$LOG_FILE" 2>/dev/null || return 1
+    touch "$LOG_DIR/$CELLULAR_LOG_NAME" 2>/dev/null || return 1
+    touch "$LOG_DIR/$MODEM_LOG_NAME" 2>/dev/null || return 1
     return 0
-}
-
-resolve_first_readable() {
-    for candidate in $1; do
-        if [ -f "$candidate" ] && [ -r "$candidate" ]; then
-            echo "$candidate"
-            return 0
-        fi
-    done
-
-    return 1
 }
 
 rotate_copytruncate() {
@@ -144,77 +133,6 @@ rotate_copytruncate() {
     return 0
 }
 
-cleanup_extra_log_tail() {
-    tail_pid="${1:-}"
-
-    if [ -n "$tail_pid" ]; then
-        kill "$tail_pid" 2>/dev/null || true
-        wait "$tail_pid" 2>/dev/null || true
-    fi
-}
-
-mirror_extra_log_loop() {
-    log_kind="$1"
-    source_candidates="$2"
-    destination_name="$3"
-    target_file="$LOG_DIR/$destination_name"
-    current_source=""
-    tail_pid=""
-
-    trap 'cleanup_extra_log_tail "$tail_pid"; exit 0' INT TERM
-
-    while true; do
-        source_file=$(resolve_first_readable "$source_candidates" || true)
-
-        if [ -z "$source_file" ]; then
-            cleanup_extra_log_tail "$tail_pid"
-            tail_pid=""
-            current_source=""
-            sleep "$RETRY_SECONDS"
-            continue
-        fi
-
-        mkdir -p "$LOG_DIR" 2>/dev/null || true
-        touch "$target_file" 2>/dev/null || true
-
-        if [ "$current_source" != "$source_file" ]; then
-            cleanup_extra_log_tail "$tail_pid"
-            tail_pid=""
-            current_source="$source_file"
-            log_msg "mirroring $log_kind log: $source_file -> $target_file"
-        fi
-
-        tail -n 0 -f "$source_file" >> "$target_file" 2>/dev/null &
-        tail_pid=$!
-        wait "$tail_pid" 2>/dev/null || true
-        tail_pid=""
-        sleep 1
-    done
-}
-
-start_extra_log_mirrors() {
-    stop_extra_log_mirrors
-
-    mirror_extra_log_loop "cellular" "$CELLULAR_LOG_CANDIDATES" "$CELLULAR_LOG_NAME" &
-    CELLULAR_MIRROR_PID=$!
-
-    mirror_extra_log_loop "modem" "$MODEM_LOG_CANDIDATES" "$MODEM_LOG_NAME" &
-    MODEM_MIRROR_PID=$!
-}
-
-stop_extra_log_mirrors() {
-    if [ -n "$CELLULAR_MIRROR_PID" ]; then
-        kill "$CELLULAR_MIRROR_PID" 2>/dev/null || true
-        wait "$CELLULAR_MIRROR_PID" 2>/dev/null || true
-        CELLULAR_MIRROR_PID=""
-    fi
-
-    if [ -n "$MODEM_MIRROR_PID" ]; then
-        kill "$MODEM_MIRROR_PID" 2>/dev/null || true
-        wait "$MODEM_MIRROR_PID" 2>/dev/null || true
-        MODEM_MIRROR_PID=""
-    fi
-}
 
 stream_logs() {
     line_count=0
@@ -235,6 +153,8 @@ stream_logs() {
 
     logread -f >"$fifo_path" 2>/dev/null &
     reader_pid=$!
+    cellular_logged=0
+    modem_logged=0
 
     exec 3<"$fifo_path"
     rm -f "$fifo_path"
@@ -242,6 +162,17 @@ stream_logs() {
     while true; do
         if IFS= read -r -t 1 line <&3; then
             printf '%s\n' "$line" >> "$LOG_FILE" || break
+
+            if printf '%s\n' "$line" | grep -Eiq "$CELLULAR_LOG_PATTERN"; then
+                [ "$cellular_logged" -eq 0 ] && log_msg "filtering cellular log -> $LOG_DIR/$CELLULAR_LOG_NAME" && cellular_logged=1
+                printf '%s\n' "$line" >> "$LOG_DIR/$CELLULAR_LOG_NAME" || true
+            fi
+
+            if printf '%s\n' "$line" | grep -Eiq "$MODEM_LOG_PATTERN"; then
+                [ "$modem_logged" -eq 0 ] && log_msg "filtering modem log -> $LOG_DIR/$MODEM_LOG_NAME" && modem_logged=1
+                printf '%s\n' "$line" >> "$LOG_DIR/$MODEM_LOG_NAME" || true
+            fi
+
             line_count=$((line_count + 1))
 
             if [ $((line_count % CHECK_EVERY_LINES)) -eq 0 ]; then
@@ -316,9 +247,7 @@ daemon() {
         fi
 
         rotate_copytruncate || true
-        start_extra_log_mirrors
         stream_logs
-        stop_extra_log_mirrors
         sleep 2
     done
 }
